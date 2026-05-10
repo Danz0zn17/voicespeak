@@ -1,0 +1,48 @@
+{
+  "categories": {
+    "Kitchen": {
+      "id": 0,
+      "mappings": {
+        "button_x": "I am hungry",
+        "button_o": "I want something to drink",
+        "analog_left": ["Apple", "Juice", "Water", "Sandwich", "Cereal"]
+      }
+    },
+    "Home": {
+      "id": 1,
+      "mappings": {
+        "button_x": "I want to watch TV",
+        "button_o": "Can we play a game?",
+        "analog_left": ["Music", "Movie", "Reading", "Resting"]
+      }
+    },
+    "Bedroom": {
+      "id": 2,
+      "mappings": {
+        "button_x": "I am tired",
+        "button_o": "Can you change my position?",
+        "analog_left": ["Blanket", "Light off", "Story time"]
+      }
+    },
+    "Bathroom": {
+      "id": 3,
+      "mappings": {
+        "button_x": "I need help",
+        "button_o": "I want to brush my teeth",
+        "analog_left": ["Bath", "Shower", "Wash hands"]
+      }
+    },
+    "Outside": {
+      "id": 4,
+      "mappings": {
+        "button_x": "I want to go for a walk",
+        "button_o": "It is beautiful out here",
+        "analog_left": ["Park", "Garden", "Sun", "Wind"]
+      }
+    }
+  },
+  "settings": {
+    "tts_rate": 150,
+    "tts_volume": 1.0
+  }
+}
