@@ -1,6 +1,6 @@
 """Entry point: load config, sync boards, build TTS + inputs, run the loop.
 
-Run with:  python3 -m voice_speak
+Run with:  python3 -m voicespeak
 """
 
 from __future__ import annotations

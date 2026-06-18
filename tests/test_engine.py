@@ -9,8 +9,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from voice_speak.engine import Engine
-from voice_speak.models import (
+from voicespeak.engine import Engine
+from voicespeak.models import (
     Action, Board, Cell,
     NEXT_BOARD, REPEAT_LAST, SCAN_NEXT, SCAN_PREV, SPEAK_CELL, SYNC,
 )

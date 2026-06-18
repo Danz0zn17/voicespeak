@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 # Replace 'pi' with the device user if different.
 User=pi
-WorkingDirectory=/home/pi/voice-speak-app
-ExecStart=/usr/bin/python3 -m voice_speak
+WorkingDirectory=/home/pi/voicespeak-app
+ExecStart=/usr/bin/python3 -m voicespeak
 Restart=always
 RestartSec=3
 # Keep audio working under systemd.

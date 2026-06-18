@@ -10,14 +10,14 @@ Full product spec: [docs/spec.md](docs/spec.md).
 ## Layout
 
 ```
-voice_speak/
+voicespeak/
   engine.py     board/cell logic, navigation, repeat-last (pure, tested)
   models.py     Board, Cell, Action
   config.py     env, paths, voice-engine selection, input map
   sync.py       Supabase sync + offline fallback (local cache, then defaults)
   tts/          piper (default), elevenlabs (optional), espeak (fallback), cache
   input/        gpio.py, hid.py (USB+BT), learn.py (button-learning), factory
-  cli.py        entry point: python3 -m voice_speak
+  cli.py        entry point: python3 -m voicespeak
 config/
   default_boards.json     bundled layout for first boot with no internet
   default_input_map.json  default input bindings (override via INPUT_MAP_FILE)
@@ -30,7 +30,7 @@ tests/test_engine.py        engine logic tests (no hardware needed)
 ```
 pip install -r requirements.txt
 cp .env.example .env   # fill in Supabase creds
-python3 -m voice_speak
+python3 -m voicespeak
 ```
 
 On a Pi, also install the system packages the voices/playback need:

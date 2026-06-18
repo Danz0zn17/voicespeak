@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .models import Action
 
-APP_DIR = Path.home() / "voice-speak"
+APP_DIR = Path.home() / "voicespeak"
 CACHE_DIR = APP_DIR / "audio_cache"
 DATA_DIR = APP_DIR / "data"
 LOCAL_BOARDS = DATA_DIR / "boards.json"  # last good sync, offline fallback
