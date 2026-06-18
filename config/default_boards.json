@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Kitchen",
+    "cells": [
+      { "label": "Hungry", "phrase": "I am hungry", "position": 0 },
+      { "label": "Drink", "phrase": "I want something to drink", "position": 1 },
+      { "label": "Apple", "phrase": "Apple", "position": 2 },
+      { "label": "Water", "phrase": "Water", "position": 3 }
+    ]
+  },
+  {
+    "name": "Feelings",
+    "cells": [
+      { "label": "Happy", "phrase": "I am happy", "position": 0 },
+      { "label": "Sad", "phrase": "I am sad", "position": 1 },
+      { "label": "Tired", "phrase": "I am tired", "position": 2 },
+      { "label": "Help", "phrase": "I need help", "position": 3 }
+    ]
+  },
+  {
+    "name": "Bathroom",
+    "cells": [
+      { "label": "Toilet", "phrase": "I need the toilet", "position": 0 },
+      { "label": "Wash", "phrase": "I want to wash my hands", "position": 1 }
+    ]
+  }
+]

@@ -1,2 +1,12 @@
-pyttsx3
+# Core (all platforms)
 requests
+
+# Device input (Linux/Pi only - safe to omit on dev machines)
+evdev; sys_platform == "linux"
+gpiozero; sys_platform == "linux"
+
+# Optional premium voice (only needed if VOICE_ENGINE=elevenlabs)
+# elevenlabs
+
+# Note: Piper (default voice), mpg123/aplay (playback) and espeak-ng (fallback)
+# are system packages installed by the device setup, not pip packages.

@@ -1,0 +1,18 @@
+[Unit]
+Description=VoiceSpeak AAC device
+After=network-online.target bluetooth.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replace 'pi' with the device user if different.
+User=pi
+WorkingDirectory=/home/pi/voice-speak-app
+ExecStart=/usr/bin/python3 -m voice_speak
+Restart=always
+RestartSec=3
+# Keep audio working under systemd.
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=multi-user.target

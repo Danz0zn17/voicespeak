@@ -1,1 +1,8 @@
-node_modules/\nvenv/\n.env\n__pycache__/
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+node_modules/
+audio_cache/
+data/

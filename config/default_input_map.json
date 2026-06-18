@@ -1,0 +1,12 @@
+{
+  "hid:304":            { "kind": "speak_cell", "target": 0 },
+  "hid:305":            { "kind": "speak_cell", "target": 1 },
+  "hid:307":            { "kind": "next_board" },
+  "hid:308":            { "kind": "repeat_last" },
+  "hid:abs:1:hi":       { "kind": "scan_next" },
+  "hid:abs:1:lo":       { "kind": "scan_prev" },
+  "gpio:17":            { "kind": "scan_next" },
+  "gpio:27":            { "kind": "speak_cell", "target": 0 },
+  "gpio:22":            { "kind": "next_board" },
+  "gpio:23":            { "kind": "repeat_last" }
+}
