@@ -5,7 +5,7 @@ inputs (GPIO switches, USB or Bluetooth gamepads) trigger spoken phrases that a
 caregiver edits from a web dashboard, synced from the cloud and cached for
 offline use.
 
-Full product spec: [docs/spec.md](docs/spec.md).
+The detailed product spec (BOM, pricing, roadmap) is maintained privately.
 
 ## Layout
 
