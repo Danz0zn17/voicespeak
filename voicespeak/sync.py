@@ -39,10 +39,29 @@ def _save_local(boards: list[Board]) -> None:
 
 def fetch_from_supabase() -> list[Board]:
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    token = os.environ.get("DEVICE_TOKEN", "")
     key = os.environ.get("SUPABASE_ANON_KEY", "")
-    if not url or not key:
-        raise EnvironmentError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
 
+    if url and token:
+        # Paired device: one call returns this family's content and doubles
+        # as the heartbeat (last_seen) for the dashboard.
+        r = requests.post(
+            f"{url}/functions/v1/device-sync",
+            json={"device_token": token}, timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if not data.get("claimed"):
+            raise RuntimeError("Device not claimed yet - claim it from the dashboard")
+        return _adapt(data["categories"], data["phrases"])
+
+    if not url or not key:
+        raise EnvironmentError(
+            "Set SUPABASE_URL plus DEVICE_TOKEN (paired device) "
+            "or SUPABASE_ANON_KEY (legacy direct access)"
+        )
+
+    # Legacy direct table access (pre-pairing installs).
     headers = {"apikey": key, "Authorization": f"Bearer {key}"}
     cats = requests.get(
         f"{url}/rest/v1/categories?select=*&order=display_order",
@@ -53,13 +72,17 @@ def fetch_from_supabase() -> list[Board]:
         f"{url}/rest/v1/phrases?select=*", headers=headers, timeout=10,
     )
     phs.raise_for_status()
+    return _adapt(cats.json(), phs.json())
 
+
+def _adapt(cats: list[dict], phrases: list[dict]) -> list[Board]:
+    """Categories + phrases rows -> the generalised Board/Cell model."""
     by_cat: dict[str, list[dict]] = {}
-    for p in phs.json():
+    for p in phrases:
         by_cat.setdefault(p["category_id"], []).append(p)
 
     boards: list[Board] = []
-    for cat in cats.json():
+    for cat in cats:
         cp = by_cat.get(cat["id"], [])
         button_x = next((p["text"] for p in cp if p["input_type"] == "button_x"), "")
         button_o = next((p["text"] for p in cp if p["input_type"] == "button_o"), "")

@@ -45,7 +45,8 @@ sudo apt-get install -y mpg123 espeak-ng        # playback + fallback voice
 
 | Key | Purpose |
 |-----|---------|
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | cloud sync |
+| `SUPABASE_URL`, `DEVICE_TOKEN` | cloud sync for a paired device (normal setup) |
+| `SUPABASE_ANON_KEY` | legacy direct table access (own Supabase project) |
 | `VOICE_ENGINE` | `piper` (default), `elevenlabs`, or `espeak` |
 | `PIPER_BIN`, `PIPER_MODEL` | Piper binary + voice model path |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | optional premium voice |
