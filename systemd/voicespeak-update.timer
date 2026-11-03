@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for VoiceSpeak updates daily and shortly after boot
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+# Spread devices out so they do not all update at midnight.
+RandomizedDelaySec=3h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=VoiceSpeak self-update to the newest release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Root so it can restart voicespeak.service; git and pip run as the owner of
+# the app directory, so file ownership never changes.
+# The installer replaces /home/pi paths with the real device user's paths,
+# the same way it does for voicespeak-setup.service.
+Type=oneshot
+User=root
+WorkingDirectory=/home/pi/voicespeak-app
+Environment=VOICESPEAK_HOME=/home/pi/voicespeak
+ExecStart=/usr/bin/python3 -m voicespeak update
