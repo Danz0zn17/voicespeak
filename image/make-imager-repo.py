@@ -46,8 +46,8 @@ def entry(image: str, version: str, url: str) -> dict[str, object]:
         "name": f"VoiceSpeak {version}",
         "description": "Talking communication device for people with cerebral palsy. Raspberry Pi Zero 2 W or Pi 4.",
         "url": url,
-        "icon": "https://voice-pad-web.netlify.app/icon-192.png",
-        "website": "https://voice-pad-web.netlify.app",
+        "icon": "https://voicespeak.co.za/icon-192.png",
+        "website": "https://voicespeak.co.za",
         "release_date": dt.date.today().isoformat(),
         **measure(image),
         # Imager device tags: Zero 2 W shares the "pi3-64bit" tag with the Pi 3
