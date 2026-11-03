@@ -14,18 +14,22 @@ voicespeak/
   engine.py     board/cell logic, navigation, repeat-last (pure, tested)
   models.py     Board, Cell, Action
   config.py     env, paths, voice-engine selection, input map
-  sync.py       Supabase sync + offline fallback (local cache, then defaults)
+  sync.py       board adapter, offline fallback, change-only swaps
+  cloud.py      zero-typing setup: device-hello, claim code, status, commands
+  updater.py    self-update to the newest v* release tag
   tts/          piper (default), elevenlabs (optional), espeak (fallback), cache
   input/        gpio.py, hid.py (USB+BT), learn.py (button-learning), factory
   bt_pair.py    Bluetooth controller pairing mode (bluetoothctl)
   setup_portal.py  first-boot Wi-Fi hotspot + phone setup page (nmcli)
-  cli.py        entry point: python3 -m voicespeak [run|pair|setup]
+  cli.py        entry point: python3 -m voicespeak [run|pair|setup|update]
 config/
   default_boards.json     bundled layout for first boot with no internet
   default_input_map.json  default input bindings (override via INPUT_MAP_FILE)
 systemd/voicespeak.service        start on boot, restart on crash
 systemd/voicespeak-setup.service  Wi-Fi setup hotspot when offline at boot
-tests/                      engine, sync, pairing + setup tests (no hardware needed)
+systemd/voicespeak-update.*       daily self-update timer (+10 min after boot)
+VERSION                     reported to the app as sw_version
+tests/                      engine, sync, cloud, pairing + setup tests (no hardware needed)
 ```
 
 ## Run (dev)
@@ -48,7 +52,9 @@ sudo apt-get install -y mpg123 espeak-ng        # playback + fallback voice
 
 | Key | Purpose |
 |-----|---------|
-| `SUPABASE_URL`, `DEVICE_TOKEN` | cloud sync for a paired device (normal setup) |
+| `SUPABASE_URL` | cloud base URL (defaults to the official VoiceSpeak cloud) |
+| `DEVICE_TOKEN`, `DEVICE_SECRET`, `PAIRING_CODE` | written by the box itself on first boot; never type these |
+| `HARDWARE_ID` | only on non-Pi dev machines (a Pi uses its CPU serial) |
 | `SUPABASE_ANON_KEY` | legacy direct table access (own Supabase project) |
 | `VOICE_ENGINE` | `piper` (default), `elevenlabs`, or `espeak` |
 | `PIPER_BIN`, `PIPER_MODEL` | Piper binary + voice model path |
@@ -58,6 +64,45 @@ sudo apt-get install -y mpg123 espeak-ng        # playback + fallback voice
 | `SETUP_HOTSPOT_PASSWORD` | optional WPA password for the setup hotspot (8+ chars; empty = open) |
 | `SETUP_PORT` | setup page port (default 80) |
 
+## Zero-typing setup
+
+A box with no `DEVICE_TOKEN` registers itself on first boot (`device-hello`
+with its CPU serial and a secret generated on the box) and keeps working from
+the bundled boards meanwhile. It says "Hello. To connect me, open the
+VoiceSpeak app on a phone or computer on this Wi-Fi."
+
+In the app, a parent on the same network sees the box and taps Connect. The
+box then speaks a 4-digit number ("Type this number in the app: 4. 7. 2. 1."),
+repeated every 20 seconds up to 6 times. Only someone in the room can hear it,
+so a stranger sharing the same public IP (common with mobile and fibre
+providers) cannot claim the box. Typing the number finishes the claim; the
+box says "Connected." and loads the family's phrases straight away. While
+unclaimed it checks every 10 seconds for 15 minutes after boot, then every
+minute.
+
+Fallback when the app cannot find the box (e.g. the phone is on mobile data):
+hold the Repeat switch (GPIO 23, or controller button 308) for 5 seconds and
+the box reads out its pairing code letter by letter, to type into the app.
+
+If a box is removed in the app, its token stops working; the box forgets it
+and registers again, ready for its next family.
+
+## App commands
+
+Each sync sends a status heartbeat (version, model, switches present,
+connected controllers, Bluetooth available). The app can send one-shot
+commands: `pair_controller`, `test_speak` ("Hello, I am working.") and
+`speak_code`.
+
+## Self-update
+
+`voicespeak-update.timer` runs `python3 -m voicespeak update` 10 minutes after
+boot and daily (randomised). It fetches tags and checks out the newest `vX.Y.Z`
+release only if the current checkout does not already contain it, so it never
+moves to untagged main and never downgrades. Dependencies are reinstalled only
+when `requirements.txt` changed. One log line per run:
+`journalctl -u voicespeak-update`. Releasing is just `git tag v0.3.1 && git push --tags`.
+
 ## Live updates
 
 The device syncs at boot, then re-checks the cloud every
@@ -66,15 +111,23 @@ cached first, then swapped in silently, only when the content actually changed.
 Offline ticks keep the current phrases; the log notes only online/offline
 changes, not every tick.
 
-## Bluetooth controller pairing
+## Controllers
 
-Hold the mapped button for 5 seconds (default: the GPIO 22 switch, or the
-controller's button 307), or run `python3 -m voicespeak pair`. The device says
-"Pairing mode. Turn on your controller.", scans for about 60 seconds, then
-pairs, trusts and connects the first gamepad it finds, and says "Controller
-connected." or "No controller found." The service then restarts itself to load
-the controller. Any input id with `:hold` can be mapped to `{"kind": "bt_pair"}`
-in the input map.
+Automatic: for 3 minutes after boot, if no controller is connected, the box
+quietly looks for one in pairing mode and pairs it (it only asks out loud,
+"Turn on your controller in pairing mode.", when there are no switches
+either). Trusted controllers reconnect on their own, and the scan stops as
+soon as one does.
+
+Hotplug: controllers are picked up whenever they appear (USB plugged in,
+Bluetooth paired, or switched back on) and dropped when they go, with no
+service restart. Keyboards and power buttons are never grabbed.
+
+Manual: hold the Next board switch (GPIO 22, or controller button 307) for 5
+seconds, tap "Pair a controller" in the app, or run `python3 -m voicespeak pair`.
+The box says "Pairing mode. Turn on your controller.", scans for about 60
+seconds, then pairs, trusts and connects the first gamepad it finds. Only one
+pairing runs at a time.
 
 ## Wi-Fi setup from a phone
 
@@ -88,8 +141,8 @@ sudo systemctl enable voicespeak-setup.service
 If the device has no network 45 seconds after boot, it starts a
 `VoiceSpeak-Setup` hotspot and says so. Join it on a phone; the setup page
 opens (or browse to http://10.42.0.1). Pick the home Wi-Fi, type the password
-and, optionally, the pairing code from the box label. The device connects,
-pairs, says "Connected." and restarts the main service. A wrong password brings
+and leave the pairing code empty (the app finds the box once it is online).
+The device connects, says "Connected." and restarts the main service. A wrong password brings
 the hotspot back with a message. With nobody configuring it, the hotspot drops
 every 15 minutes to let known networks reconnect. Needs NetworkManager
 (Raspberry Pi OS Bookworm or later).

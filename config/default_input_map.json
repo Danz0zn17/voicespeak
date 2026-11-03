@@ -10,5 +10,7 @@
   "gpio:22":            { "kind": "next_board" },
   "gpio:23":            { "kind": "repeat_last" },
   "gpio:22:hold":       { "kind": "bt_pair" },
-  "hid:307:hold":       { "kind": "bt_pair" }
+  "hid:307:hold":       { "kind": "bt_pair" },
+  "gpio:23:hold":       { "kind": "speak_code" },
+  "hid:308:hold":       { "kind": "speak_code" }
 }

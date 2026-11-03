@@ -21,6 +21,10 @@ LOCAL_BOARDS = DATA_DIR / "boards.json"  # last good sync, offline fallback
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_BOARDS = PACKAGE_DIR / "config" / "default_boards.json"
 DEFAULT_INPUT_MAP = PACKAGE_DIR / "config" / "default_input_map.json"
+VERSION_FILE = PACKAGE_DIR / "VERSION"
+
+# The official VoiceSpeak cloud; SUPABASE_URL overrides it for self-hosting.
+DEFAULT_CLOUD_URL = "https://drwgbsakfnrgyzdsitxt.supabase.co"
 
 
 def load_env(env_path: Path | None = None) -> None:
@@ -36,6 +40,10 @@ def load_env(env_path: Path | None = None) -> None:
             if line and not line.startswith("#") and "=" in line:
                 k, _, v = line.partition("=")
                 os.environ.setdefault(k.strip(), v.strip())
+
+
+def cloud_url() -> str:
+    return os.environ.get("SUPABASE_URL", "").rstrip("/") or DEFAULT_CLOUD_URL
 
 
 def sync_interval() -> float:
@@ -65,3 +73,38 @@ def load_input_map() -> dict[str, Action]:
     with open(path) as f:
         raw = json.load(f)
     return {input_id: Action.from_dict(spec) for input_id, spec in raw.items()}
+
+
+def env_path() -> Path:
+    return APP_DIR / ".env"
+
+
+def update_env_text(text: str, updates: dict[str, str]) -> str:
+    """Set KEY=VALUE lines in .env content, keeping everything else."""
+    lines, done = [], set()
+    for line in text.splitlines():
+        key = line.split("=", 1)[0].strip()
+        if "=" in line and not line.lstrip().startswith("#") and key in updates:
+            lines.append(f"{key}={updates[key]}")
+            done.add(key)
+        else:
+            lines.append(line)
+    lines += [f"{k}={v}" for k, v in updates.items() if k not in done]
+    return "\n".join(lines) + "\n"
+
+
+def write_env(updates: dict[str, str]) -> None:
+    """Persist KEY=VALUE pairs to the device .env (mode 600) and os.environ."""
+    path = env_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text() if path.exists() else ""
+    path.write_text(update_env_text(text, updates))
+    os.chmod(path, 0o600)
+    # When run as root (setup portal), hand the file back to the dir's owner.
+    try:
+        st = path.parent.stat()
+        if os.geteuid() == 0:
+            os.chown(path, st.st_uid, st.st_gid)
+    except (OSError, AttributeError):
+        pass
+    os.environ.update(updates)

@@ -10,9 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from voicespeak.bt_pair import is_gamepad_name, parse_devices, pick_gamepad
 from voicespeak.engine import Engine
 from voicespeak.models import Action, BT_PAIR, Board, Cell
-from voicespeak.setup_portal import (
-    parse_setup_form, parse_wifi_list, render_page, split_terse, update_env_text,
-)
+from voicespeak.config import update_env_text
+from voicespeak.setup_portal import parse_setup_form, parse_wifi_list, render_page, split_terse
 
 BTCTL = (
     "Device AA:BB:CC:DD:EE:01 JBL Flip 5\n"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 
@@ -36,6 +37,9 @@ class TTSEngine:
     """Subclasses implement _synth(text, out_path) and set self.ext."""
 
     ext = ".wav"
+    # Presses and cloud prompts (claim code, pairing) speak from different
+    # threads; one lock keeps them from talking over each other.
+    _play_lock = threading.Lock()
 
     def __init__(self, cache_dir: Path):
         self.cache_dir = cache_dir
@@ -61,10 +65,11 @@ class TTSEngine:
             return
         print(f"Speaking: {text}")
         path = self._cache_path(text)
-        if not path.exists():
-            if not self._synth(text, path):
-                return
-        play_file(path)
+        with self._play_lock:
+            if not path.exists():
+                if not self._synth(text, path):
+                    return
+            play_file(path)
 
     def speak_system(self, text: str) -> None:
         # System prompts ("Board: Kitchen") use the same path by default.

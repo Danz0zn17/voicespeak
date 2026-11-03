@@ -112,16 +112,21 @@ def _adapt(cats: list[dict], phrases: list[dict]) -> list[Board]:
     return boards
 
 
-def load_boards() -> list[Board]:
-    """Cloud first, then last-good local cache, then bundled defaults."""
-    try:
-        print("Syncing from cloud...")
-        boards = fetch_from_supabase()
-        _save_local(boards)
-        print(f"Loaded {len(boards)} boards from cloud.")
-        return boards
-    except Exception as e:  # noqa: BLE001 - offline is an expected state
-        print(f"Cloud sync failed ({e}). Trying offline data.")
+def load_boards(use_cloud: bool = True) -> list[Board]:
+    """Cloud first, then last-good local cache, then bundled defaults.
+
+    Paired devices pass use_cloud=False: their cloud sync runs through the
+    DeviceLink, which also delivers one-shot commands that must not be lost.
+    """
+    if use_cloud:
+        try:
+            print("Syncing from cloud...")
+            boards = fetch_from_supabase()
+            _save_local(boards)
+            print(f"Loaded {len(boards)} boards from cloud.")
+            return boards
+        except Exception as e:  # noqa: BLE001 - offline is an expected state
+            print(f"Cloud sync failed ({e}). Trying offline data.")
 
     for path in (LOCAL_BOARDS, DEFAULT_BOARDS):
         if Path(path).exists():
@@ -171,9 +176,13 @@ class BackgroundSync:
         try:
             boards = self.fetch()
         except Exception as e:  # noqa: BLE001 - offline is an expected state
-            self._set_state(_sync_state(e), e)
+            self.set_state(_sync_state(e), e)
             return False
-        self._set_state("online")
+        self.set_state("online")
+        return self.offer(boards)
+
+    def offer(self, boards: list[Board]) -> bool:
+        """Apply boards fetched elsewhere, only if their content changed."""
         digest = boards_digest(boards)
         if digest == self.digest:
             return False
@@ -185,12 +194,15 @@ class BackgroundSync:
         print(f"Phrases updated from cloud ({len(boards)} boards).")
         return True
 
-    def _set_state(self, state: str, error: Exception | None = None) -> None:
+    def set_state(self, state: str, error: Exception | None = None) -> None:
+        """Log cloud state transitions once, not every tick."""
         if state == self.state:
             return
         self.state = state
         if state == "online":
             print("Cloud sync: online.")
+        elif state == "unclaimed":
+            print("Cloud sync: online, waiting to be connected in the app.")
         else:
             print(f"Cloud sync: {state} ({error}). Using current phrases.")
 

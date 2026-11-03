@@ -24,6 +24,7 @@ from urllib.parse import parse_qs
 import requests
 
 from . import config
+from .config import write_env
 
 HOTSPOT_NAME = "VoiceSpeak-Setup"
 WAIT_SECONDS = 45
@@ -31,7 +32,7 @@ CONNECT_SECONDS = 30
 # With no form submitted, drop the hotspot this often and let NetworkManager
 # retry known networks (covers "router was just slow to boot").
 RETRY_MINUTES = 15
-DEFAULT_CLOUD_URL = "https://drwgbsakfnrgyzdsitxt.supabase.co"
+DEFAULT_CLOUD_URL = config.DEFAULT_CLOUD_URL
 # Make every DNS lookup on the hotspot resolve to us, so phones pop the page up.
 DNSMASQ_CONF = Path("/etc/NetworkManager/dnsmasq-shared.d/voicespeak-setup.conf")
 
@@ -101,20 +102,6 @@ def parse_setup_form(body: str) -> tuple[dict | None, str]:
     return {"ssid": ssid, "password": password, "pairing_code": code}, ""
 
 
-def update_env_text(text: str, updates: dict[str, str]) -> str:
-    """Set KEY=VALUE lines in .env content, keeping everything else."""
-    lines, done = [], set()
-    for line in text.splitlines():
-        key = line.split("=", 1)[0].strip()
-        if "=" in line and not line.lstrip().startswith("#") and key in updates:
-            lines.append(f"{key}={updates[key]}")
-            done.add(key)
-        else:
-            lines.append(line)
-    lines += [f"{k}={v}" for k, v in updates.items() if k not in done]
-    return "\n".join(lines) + "\n"
-
-
 PAGE_CSS = """
 body{margin:0;font-family:system-ui,sans-serif;background:#0b1020;color:#f1f5f9}
 main{max-width:420px;margin:0 auto;padding:28px 20px 48px}
@@ -152,8 +139,8 @@ def render_page(networks: list[dict], error: str = "") -> str:
 <input id="password" name="password" type="password" autocomplete="off">
 <label for="pairing_code">Pairing code (optional)</label>
 <input id="pairing_code" name="pairing_code" autocomplete="off"
- autocapitalize="characters" placeholder="From the box label">
-<p class="hint">Find it on the box label, or under Devices in the dashboard.</p>
+ autocapitalize="characters" placeholder="Leave empty">
+<p class="hint">Leave empty: the app will find this box once it is online.</p>
 <button type="submit">Connect</button>
 </form></main></body></html>"""
 
@@ -242,24 +229,6 @@ def connect_wifi(ssid: str, password: str) -> bool:
 
 
 # ---- pairing + .env ---------------------------------------------------------
-
-def _env_path() -> Path:
-    return config.APP_DIR / ".env"
-
-
-def write_env(updates: dict[str, str]) -> None:
-    path = _env_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = path.read_text() if path.exists() else ""
-    path.write_text(update_env_text(text, updates))
-    os.chmod(path, 0o600)
-    # We run as root; hand the file back to the device user who owns the dir.
-    try:
-        st = path.parent.stat()
-        os.chown(path, st.st_uid, st.st_gid)
-    except (OSError, KeyError):
-        pass
-
 
 def pair_device(code: str) -> str:
     """Exchange a pairing code for a device token (same call as the installer)."""

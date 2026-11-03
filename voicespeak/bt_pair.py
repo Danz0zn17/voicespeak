@@ -2,8 +2,9 @@
 
 Scans for ~60 seconds, then pairs, trusts and connects the first gamepad-like
 device it finds. Trusting means the controller reconnects on its own after a
-reboot. Triggered by a long hold mapped to "bt_pair" in the input map, or by
-`python3 -m voicespeak pair`.
+reboot. Triggered by a long hold mapped to "bt_pair" in the input map, the
+"Pair a controller" command from the app, `python3 -m voicespeak pair`, or
+automatically for a few minutes after boot when no controller is connected.
 
 Parsing is pure (tested); everything that touches the radio goes through
 _btctl so a dev machine without BlueZ gets a clear error, never a crash.
@@ -14,10 +15,17 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import threading
 import time
+from collections.abc import Callable
 
 SCAN_SECONDS = 60
+AUTO_PAIR_SECONDS = 180
 POLL_SECONDS = 2
+
+# One pairing at a time: the boot window, a held button and an app command
+# can all ask for it.
+_PAIRING = threading.Lock()
 
 _DEVICE_LINE = re.compile(r"Device ((?:[0-9A-F]{2}:){5}[0-9A-F]{2}) (.+)$", re.I)
 
@@ -74,10 +82,30 @@ def _paired() -> set[str]:
     return {mac for mac, _ in parse_devices(out)}
 
 
-def pair_controller(scan_seconds: int = SCAN_SECONDS) -> tuple[bool, str]:
-    """Returns (connected, message). Never raises."""
-    if shutil.which("bluetoothctl") is None:
+def bt_available() -> bool:
+    return shutil.which("bluetoothctl") is not None
+
+
+def pair_controller(
+    scan_seconds: int = SCAN_SECONDS,
+    stop_when: Callable[[], bool] | None = None,
+) -> tuple[bool, str]:
+    """Returns (connected, message). Never raises.
+
+    stop_when is polled during the scan; when it turns true (e.g. a trusted
+    controller reconnected by itself) the scan ends early with "already".
+    """
+    if not bt_available():
         return False, "bluetoothctl not found - install bluez (Raspberry Pi OS has it)"
+    if not _PAIRING.acquire(blocking=False):
+        return False, "Pairing already in progress"
+    try:
+        return _pair(scan_seconds, stop_when)
+    finally:
+        _PAIRING.release()
+
+
+def _pair(scan_seconds: int, stop_when: Callable[[], bool] | None) -> tuple[bool, str]:
     try:
         # Each bluetoothctl call registers its own default agent, which accepts
         # the "just works" pairing that gamepads use.
@@ -93,6 +121,8 @@ def pair_controller(scan_seconds: int = SCAN_SECONDS) -> tuple[bool, str]:
             found = None
             while time.time() < deadline and found is None:
                 time.sleep(POLL_SECONDS)
+                if stop_when and stop_when():
+                    return False, "already"
                 found = pick_gamepad(parse_devices(_btctl("devices")), skip=already)
         finally:
             scan.terminate()
@@ -114,13 +144,42 @@ def pair_controller(scan_seconds: int = SCAN_SECONDS) -> tuple[bool, str]:
 
 
 def run_pairing_mode(tts) -> bool:
-    """Spoken pairing flow. Returns True when a controller connected."""
-    if shutil.which("bluetoothctl") is None:
+    """Spoken pairing flow (button hold, app command, CLI).
+    Returns True when a controller connected."""
+    if not bt_available():
         print("Pairing unavailable: bluetoothctl not found (bluez not installed).")
         tts.speak_system("Bluetooth is not available on this device.")
+        return False
+    if _PAIRING.locked():
+        tts.speak_system("Already looking for a controller. Turn yours on in pairing mode.")
         return False
     tts.speak_system("Pairing mode. Turn on your controller.")
     ok, message = pair_controller()
     print(message)
     tts.speak_system("Controller connected." if ok else "No controller found.")
+    return ok
+
+
+def should_auto_pair(bt: bool, controllers: list[str]) -> bool:
+    """Boot window only when Bluetooth exists and no controller is connected."""
+    return bt and not controllers
+
+
+def auto_pair_window(tts, has_gpio: bool, controllers: Callable[[], list[str]],
+                     seconds: int = AUTO_PAIR_SECONDS) -> bool:
+    """Quietly look for a controller in pairing mode for a few minutes after boot.
+
+    Only asks out loud when the box has no switches either (otherwise a child
+    with switches would hear it every boot). Stops early when a trusted
+    controller reconnects on its own. Returns True when a new one paired.
+    """
+    if not should_auto_pair(bt_available(), controllers()):
+        return False
+    print(f"No controller connected; looking for one for {seconds // 60} minutes.")
+    if not has_gpio:
+        tts.speak_system("Turn on your controller in pairing mode.")
+    ok, message = pair_controller(seconds, stop_when=lambda: bool(controllers()))
+    print(f"Auto-pair: {message}")
+    if ok:
+        tts.speak_system("Controller connected.")
     return ok

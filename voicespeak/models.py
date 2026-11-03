@@ -17,10 +17,11 @@ PREV_BOARD = "prev_board"
 REPEAT_LAST = "repeat_last"
 SYNC = "sync"
 BT_PAIR = "bt_pair"         # enter Bluetooth controller pairing mode
+SPEAK_CODE = "speak_code"   # say the box's pairing code, letter by letter
 
 ACTION_KINDS = {
     SPEAK_CELL, SCAN_NEXT, SCAN_PREV, NEXT_BOARD, PREV_BOARD, REPEAT_LAST, SYNC,
-    BT_PAIR,
+    BT_PAIR, SPEAK_CODE,
 }
 
 

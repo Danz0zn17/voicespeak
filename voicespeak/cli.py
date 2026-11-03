@@ -3,69 +3,118 @@
 Run with:  python3 -m voicespeak          the device (default)
            python3 -m voicespeak pair     Bluetooth controller pairing mode
            python3 -m voicespeak setup    first-boot Wi-Fi hotspot (as root)
+           python3 -m voicespeak update   update to the newest release (timer)
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 from . import config
 from .engine import Engine
 from .input import build_sources, merge
-from .sync import BackgroundSync, load_boards
+from .models import SPEAK_CODE, SYNC
+from .sync import BackgroundSync, _adapt, load_boards
 from .tts import get_tts
 
-# Exit code after pairing mode: systemd (Restart=always) restarts the service,
-# which picks up the new controller and drops presses queued while pairing.
-EXIT_RESTART = 75
+
+def _legacy_mode() -> bool:
+    """Old installs that read tables with the anon key and have no token."""
+    return bool(os.environ.get("SUPABASE_ANON_KEY")) and not os.environ.get("DEVICE_TOKEN")
 
 
 def run() -> int:
+    from . import bt_pair, cloud
+
     tts = get_tts(config.voice_engine(), config.CACHE_DIR)
-    boards = load_boards()
+    legacy = _legacy_mode()
+    # Paired and new boxes start from local data; the cloud link syncs at once.
+    boards = load_boards(use_cloud=legacy)
 
     # Pre-cache every phrase so presses are instant and work offline.
     phrases = [c.phrase for b in boards for c in b.cells if c.phrase]
     tts.precache(phrases)
 
-    restart = False
+    def pair_in_background() -> None:
+        threading.Thread(target=bt_pair.run_pairing_mode, args=(tts,),
+                         name="pair", daemon=True).start()
 
-    def on_pair() -> None:
-        nonlocal restart
-        from .bt_pair import run_pairing_mode
-        run_pairing_mode(tts)
-        restart = True
+    engine = Engine(boards, tts, on_pair=pair_in_background)
 
-    engine = Engine(boards, tts, on_sync=load_boards, on_pair=on_pair)
-
-    # Parent edits in the dashboard reach the device within one interval.
     syncer = BackgroundSync(
         config.sync_interval(), boards,
         apply=engine.replace_boards, precache=tts.precache,
     )
-    syncer.start()
 
     input_map = config.load_input_map()
     sources = build_sources(input_map)
+    hid = next((s for s in sources if s.name == "hid"), None)
+    has_gpio = any(s.name == "gpio" for s in sources)
+
+    def controllers() -> list[str]:
+        return hid.connected_names() if hid else []
+
+    link = None
+    if legacy:
+        engine.on_sync = load_boards
+        syncer.start()
+    else:
+        def on_command(cmd: str) -> None:
+            print(f"Command from app: {cmd}")
+            if cmd == "pair_controller":
+                bt_pair.run_pairing_mode(tts)
+            elif cmd == "test_speak":
+                tts.speak_system("Hello, I am working.")
+            elif cmd == "speak_code":
+                link.speak_code()
+
+        def status() -> dict:
+            return cloud.status_payload(
+                cloud.sw_version(), cloud.device_model(), has_gpio,
+                controllers(), bt_pair.bt_available(),
+            )
+
+        link = cloud.DeviceLink(
+            tts, offer=syncer.offer, set_state=syncer.set_state, status=status,
+            on_command=on_command, adapt=_adapt,
+        )
+        engine.on_sync = None
+        link.start()
+
     if not sources:
         print("No input sources available. Check the controller / GPIO wiring.")
         return 1
+
+    # A controller in pairing mode at boot is paired without anyone asking.
+    if hid is not None:
+        threading.Thread(target=bt_pair.auto_pair_window,
+                         args=(tts, has_gpio, controllers), name="auto-pair",
+                         daemon=True).start()
 
     print(f"Ready. Starting board: {engine.board.name}")
     try:
         for input_id in merge(sources):
             action = input_map.get(input_id)
-            if action:
-                engine.dispatch(action)
-            if restart:
-                print("Restarting to load the new controller.")
-                return EXIT_RESTART
+            if not action:
+                continue
+            if action.kind == SPEAK_CODE:
+                if link:
+                    link.speak_code()
+                continue
+            if action.kind == SYNC and link:
+                link.sync_now()
+                continue
+            engine.dispatch(action)
     except KeyboardInterrupt:
         print("Exiting.")
     finally:
         syncer.stop()
+        if link:
+            link.stop()
         for src in sources:
             src.close()
     return 0
@@ -91,7 +140,7 @@ def pair() -> int:
     tts = _setup_tts(config.CACHE_DIR)
     ok = run_pairing_mode(tts)
     if ok:
-        print("Restart the device service to use it: sudo systemctl restart voicespeak")
+        print("Paired. The running device service picks it up by itself.")
     return 0 if ok else 1
 
 
@@ -102,7 +151,12 @@ def setup() -> int:
     return run_setup(tts)
 
 
-COMMANDS = {"run": run, "pair": pair, "setup": setup}
+def update() -> int:
+    from .updater import run_update
+    return run_update()
+
+
+COMMANDS = {"run": run, "pair": pair, "setup": setup, "update": update}
 
 
 def main(argv: list[str] | None = None) -> int:
