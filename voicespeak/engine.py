@@ -3,15 +3,20 @@
 Pure Python, no hardware or network imports, so it is unit-testable on any OS.
 Fixes the legacy bugs: scan starts at the first cell (no off-by-one) and the
 scan pointer resets when the board changes.
+
+Boards can be swapped from the background sync thread (replace_boards); a lock
+keeps that swap atomic with respect to a press being handled.
 """
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 
 from .models import (
     Action, Board,
-    NEXT_BOARD, PREV_BOARD, REPEAT_LAST, SCAN_NEXT, SCAN_PREV, SPEAK_CELL, SYNC,
+    BT_PAIR, NEXT_BOARD, PREV_BOARD, REPEAT_LAST, SCAN_NEXT, SCAN_PREV, SPEAK_CELL,
+    SYNC,
 )
 
 
@@ -21,12 +26,15 @@ class Engine:
         boards: list[Board],
         tts,
         on_sync: Callable[[], list[Board]] | None = None,
+        on_pair: Callable[[], None] | None = None,
     ):
         if not boards:
             raise ValueError("Engine needs at least one board")
         self.boards = boards
         self.tts = tts
         self.on_sync = on_sync
+        self.on_pair = on_pair
+        self._lock = threading.RLock()
         self.board_idx = 0
         self.scan_idx = -1  # -1 so the first SCAN_NEXT lands on cell 0
         self.last_phrase = ""
@@ -81,6 +89,18 @@ class Engine:
         if self.last_phrase:
             self.tts.speak(self.last_phrase)
 
+    def replace_boards(self, boards: list[Board]) -> None:
+        """Swap in new boards (background sync). Silent: no prompt interrupts
+        the user. Stays on the same board by name when it still exists."""
+        if not boards:
+            return
+        with self._lock:
+            current = self.board.name
+            self.boards = boards
+            names = [b.name for b in boards]
+            self.board_idx = names.index(current) if current in names else 0
+            self.scan_idx = -1
+
     def sync(self) -> None:
         if not self.on_sync:
             return
@@ -91,12 +111,21 @@ class Engine:
             self._say_system("Sync failed.")
             return
         if boards:
-            self.boards = boards
-            self.board_idx = 0
-            self.scan_idx = -1
+            with self._lock:
+                self.boards = boards
+                self.board_idx = 0
+                self.scan_idx = -1
             self._say_system("Phrases synced.")
 
     def dispatch(self, action: Action) -> None:
+        if action.kind == BT_PAIR:
+            if self.on_pair:
+                self.on_pair()
+            return
+        with self._lock:
+            self._dispatch(action)
+
+    def _dispatch(self, action: Action) -> None:
         if action.kind == SPEAK_CELL:
             self.speak_cell(action.target)
         elif action.kind == SCAN_NEXT:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import queue
 from collections.abc import Iterator
 
-from .base import InputSource
+from .base import HOLD_SECONDS, InputSource
 
 try:
     from gpiozero import Button
@@ -29,8 +29,9 @@ class GpioSource(InputSource):
         self._q: queue.Queue[str] = queue.Queue()
         self._buttons = []
         for pin in pins:
-            btn = Button(pin, bounce_time=bounce_time)
+            btn = Button(pin, bounce_time=bounce_time, hold_time=HOLD_SECONDS)
             btn.when_pressed = lambda p=pin: self._q.put(f"gpio:{p}")
+            btn.when_held = lambda p=pin: self._q.put(f"gpio:{p}:hold")
             self._buttons.append(btn)
         print(f"Listening on GPIO pins: {pins}")
 

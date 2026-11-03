@@ -1,16 +1,18 @@
 """USB and Bluetooth HID gamepads via evdev (Linux only).
 
 Buttons yield "hid:<code>". Analog axes that cross a threshold yield
-"hid:abs:<code>:hi" / ":lo" with a cooldown to avoid repeats. Codes are never
-interpreted here - they are mapped to actions by the input map.
+"hid:abs:<code>:hi" / ":lo" with a cooldown to avoid repeats. A button held
+for HOLD_SECONDS also yields "hid:<code>:hold". Codes are never interpreted
+here - they are mapped to actions by the input map.
 """
 
 from __future__ import annotations
 
+import select
 import time
 from collections.abc import Iterator
 
-from .base import InputSource
+from .base import HOLD_SECONDS, InputSource
 
 try:
     import evdev
@@ -58,9 +60,29 @@ class HidSource(InputSource):
         self._last_axis = 0.0
 
     def events(self) -> Iterator[str]:
-        for event in self.device.read_loop():
+        held: dict[int, float] = {}  # key code -> press time, until hold fires
+        while True:
+            # Short select timeout so a hold fires while the button is still down.
+            ready, _, _ = select.select([self.device.fd], [], [], 0.25)
+            if ready:
+                try:
+                    for input_id in self._read(held):
+                        yield input_id
+                except BlockingIOError:
+                    pass
+            now = time.time()
+            for code, pressed_at in list(held.items()):
+                if now - pressed_at >= HOLD_SECONDS:
+                    del held[code]
+                    yield f"hid:{code}:hold"
+
+    def _read(self, held: dict[int, float]) -> Iterator[str]:
+        for event in self.device.read():
             if event.type == ecodes.EV_KEY and event.value == 1:
+                held[event.code] = time.time()
                 yield f"hid:{event.code}"
+            elif event.type == ecodes.EV_KEY and event.value == 0:
+                held.pop(event.code, None)
             elif event.type == ecodes.EV_ABS:
                 now = time.time()
                 if now - self._last_axis < AXIS_COOLDOWN:

@@ -3,6 +3,9 @@
 Every input source yields opaque string ids like "hid:304" or "gpio:17". The
 engine never knows about a specific controller - the dashboard/setup binds ids
 to actions in the input map. This is what makes the device universal.
+
+Holding a button for HOLD_SECONDS also yields "<id>:hold" (e.g. "gpio:22:hold"),
+so a long hold can be mapped to a setup action such as Bluetooth pairing.
 """
 
 from __future__ import annotations
@@ -10,6 +13,8 @@ from __future__ import annotations
 import queue
 import threading
 from collections.abc import Iterator
+
+HOLD_SECONDS = 5.0
 
 
 class InputSource:

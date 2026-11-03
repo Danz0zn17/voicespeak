@@ -11,7 +11,8 @@ from pathlib import Path
 
 from .models import Action
 
-APP_DIR = Path.home() / "voicespeak"
+# VOICESPEAK_HOME lets root-run services (setup portal) use the device user's dir.
+APP_DIR = Path(os.environ.get("VOICESPEAK_HOME") or Path.home() / "voicespeak")
 CACHE_DIR = APP_DIR / "audio_cache"
 DATA_DIR = APP_DIR / "data"
 LOCAL_BOARDS = DATA_DIR / "boards.json"  # last good sync, offline fallback
@@ -35,6 +36,14 @@ def load_env(env_path: Path | None = None) -> None:
             if line and not line.startswith("#") and "=" in line:
                 k, _, v = line.partition("=")
                 os.environ.setdefault(k.strip(), v.strip())
+
+
+def sync_interval() -> float:
+    """Seconds between background cloud syncs (0 disables; boot sync only)."""
+    try:
+        return max(0.0, float(os.environ.get("SYNC_INTERVAL_SECONDS", "60")))
+    except ValueError:
+        return 60.0
 
 
 def voice_engine() -> str:

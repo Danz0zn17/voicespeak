@@ -8,5 +8,7 @@
   "gpio:17":            { "kind": "scan_next" },
   "gpio:27":            { "kind": "speak_cell", "target": 0 },
   "gpio:22":            { "kind": "next_board" },
-  "gpio:23":            { "kind": "repeat_last" }
+  "gpio:23":            { "kind": "repeat_last" },
+  "gpio:22:hold":       { "kind": "bt_pair" },
+  "hid:307:hold":       { "kind": "bt_pair" }
 }

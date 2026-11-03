@@ -16,9 +16,11 @@ NEXT_BOARD = "next_board"
 PREV_BOARD = "prev_board"
 REPEAT_LAST = "repeat_last"
 SYNC = "sync"
+BT_PAIR = "bt_pair"         # enter Bluetooth controller pairing mode
 
 ACTION_KINDS = {
     SPEAK_CELL, SCAN_NEXT, SCAN_PREV, NEXT_BOARD, PREV_BOARD, REPEAT_LAST, SYNC,
+    BT_PAIR,
 }
 
 

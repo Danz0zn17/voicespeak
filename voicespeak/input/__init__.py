@@ -13,7 +13,7 @@ def build_sources(input_map: dict) -> list[InputSource]:
     sources: list[InputSource] = []
 
     gpio_pins = sorted({
-        int(k.split(":", 1)[1]) for k in input_map if k.startswith("gpio:")
+        int(k.split(":")[1]) for k in input_map if k.startswith("gpio:")
     })
     if gpio_pins:
         try:

@@ -1,0 +1,19 @@
+[Unit]
+Description=VoiceSpeak first-boot Wi-Fi setup hotspot
+After=NetworkManager.service sound.target
+Wants=NetworkManager.service
+
+[Service]
+# Root: it manages Wi-Fi through NetworkManager and serves the page on port 80.
+# It exits straight away when the device is already online.
+Type=simple
+User=root
+# Replace 'pi' with the device user if different.
+WorkingDirectory=/home/pi/voicespeak-app
+Environment=VOICESPEAK_HOME=/home/pi/voicespeak
+ExecStart=/usr/bin/python3 -m voicespeak setup
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
