@@ -1,0 +1,6 @@
+# The VoiceSpeak image is the only one exported. ARCHIVE_FILENAME (set in the
+# build config) gives the final name: VoiceSpeak-<version>-arm64.img.xz
+IMG_SUFFIX=""
+if [ "${USE_QEMU}" = "1" ]; then
+	export IMG_SUFFIX="${IMG_SUFFIX}-qemu"
+fi

@@ -1,0 +1,30 @@
+# pi-gen build config for the VoiceSpeak image. build-local.sh and the GitHub
+# workflow fill in @VERSION@ and @REF@. No secrets belong in this file.
+IMG_NAME="VoiceSpeak"
+PI_GEN_RELEASE="VoiceSpeak @VERSION@"
+RELEASE="bookworm"
+ARCHIVE_FILENAME="VoiceSpeak-@VERSION@-arm64"
+DEPLOY_COMPRESSION="xz"
+COMPRESSION_LEVEL=6
+STAGE_LIST="stage0 stage1 stage2 stage-voicespeak"
+
+TARGET_HOSTNAME="voicespeak"
+LOCALE_DEFAULT="en_ZA.UTF-8"
+KEYBOARD_KEYMAP="us"
+KEYBOARD_LAYOUT="English (US)"
+TIMEZONE_DEFAULT="Africa/Johannesburg"
+# Unblocks Wi-Fi on first boot (Raspberry Pi OS blocks it until a country is set)
+WPA_COUNTRY="ZA"
+
+# Login account for support only. Locked (no password) and SSH off: Levi sets a
+# username, password and SSH in Raspberry Pi Imager when he needs a way in.
+FIRST_USER_NAME="pi"
+ENABLE_SSH=0
+
+# Read by stage-voicespeak (must be exported to reach the stage scripts)
+export VOICESPEAK_VERSION="@VERSION@"
+export VOICESPEAK_REF="@REF@"
+export VOICESPEAK_REPO="https://github.com/Danz0zn17/voicespeak.git"
+export VOICESPEAK_CLOUD_URL="https://drwgbsakfnrgyzdsitxt.supabase.co"
+# Set to 1 only to ship with the robotic espeak voice if Piper fails to install
+export VOICESPEAK_ALLOW_ESPEAK=0

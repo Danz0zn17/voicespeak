@@ -1,0 +1,103 @@
+# Builds the VoiceSpeak SD card image and publishes it as a GitHub release.
+# Trigger: push a tag like v1.0.0 (see image/README.md), or run by hand.
+name: Build SD card image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for a test build (no release is published)"
+        required: true
+        default: "test"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PI_GEN_BRANCH: bookworm-arm64
+  PI_GEN_COMMIT: d47bb153dda58f2a53de061ef18ecc22d6afadaf
+
+jobs:
+  build:
+    # Native ARM runner: no emulation, much faster. Free for public repositories.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    steps:
+      - name: Check out VoiceSpeak
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Work out version
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get pi-gen
+        run: |
+          git clone --branch "${PI_GEN_BRANCH}" https://github.com/RPi-Distro/pi-gen.git pi-gen
+          git -C pi-gen checkout --quiet "${PI_GEN_COMMIT}"
+
+      - name: Add the VoiceSpeak stage
+        run: image/prepare-pi-gen.sh pi-gen "${{ steps.v.outputs.version }}" "${GITHUB_SHA}"
+
+      - name: Build image (about 1 to 2 hours)
+        working-directory: pi-gen
+        run: ./build-docker.sh
+
+      - name: Checksum and Imager repository file
+        id: out
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          IMG="VoiceSpeak-${VERSION}-arm64.img.xz"
+          mkdir -p out
+          mv "pi-gen/deploy/${IMG}" out/
+          (cd out && sha256sum "${IMG}" > "${IMG}.sha256")
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}/${IMG}"
+          python3 image/make-imager-repo.py "out/${IMG}" --version "${VERSION}" --url "${URL}" > out/voicespeak-imager.json
+          cp pi-gen/deploy/build.log out/build.log || true
+          ls -lh out
+
+      - name: Keep build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ steps.v.outputs.version }}
+          path: |
+            pi-gen/deploy/build.log
+            pi-gen/deploy/build-docker.log
+          if-no-files-found: ignore
+
+      - name: Keep test image
+        if: steps.v.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceSpeak-${{ steps.v.outputs.version }}
+          path: out/
+          retention-days: 7
+
+      - name: Publish release
+        if: steps.v.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "VoiceSpeak ${VERSION}" \
+            --notes "SD card image for Raspberry Pi Zero 2 W and Pi 4. Flash with Raspberry Pi Imager; see image/README.md." \
+            out/VoiceSpeak-*.img.xz out/VoiceSpeak-*.img.xz.sha256 out/voicespeak-imager.json

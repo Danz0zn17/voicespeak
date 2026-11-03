@@ -1,0 +1,12 @@
+[Unit]
+Description=VoiceSpeak boot setup (unique hostname, sound output)
+After=local-fs.target sound.target
+Before=avahi-daemon.service voicespeak.service voicespeak-setup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/voicespeak-firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

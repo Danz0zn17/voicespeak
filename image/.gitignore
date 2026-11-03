@@ -1,0 +1,3 @@
+# Local build checkout and outputs (build-local.sh)
+.pi-gen/
+deploy/

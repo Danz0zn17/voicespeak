@@ -1,0 +1,19 @@
+{
+  "os_list": [
+    {
+      "name": "VoiceSpeak vX.Y.Z",
+      "description": "Talking communication device for people with cerebral palsy. Raspberry Pi Zero 2 W or Pi 4.",
+      "url": "https://github.com/Danz0zn17/voicespeak/releases/download/vX.Y.Z/VoiceSpeak-vX.Y.Z-arm64.img.xz",
+      "icon": "https://voice-pad-web.netlify.app/icon-192.png",
+      "website": "https://voice-pad-web.netlify.app",
+      "release_date": "2026-11-03",
+      "image_download_size": 0,
+      "image_download_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "extract_size": 0,
+      "extract_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "devices": ["pi4-64bit", "pi3-64bit"],
+      "init_format": "systemd",
+      "architecture": "armv8"
+    }
+  ]
+}
