@@ -22,9 +22,11 @@ What happens on first boot:
 ## Making a release (Danny)
 
 1. Make sure everything you want in the image is pushed to `main`.
-2. Tag and push:
+2. Sign the tag with the release key and push it. Boxes ignore unsigned tags
+   (see "Self-update" in the main README):
    ```
-   git tag v1.0.0
+   git -c gpg.format=ssh -c user.signingkey=~/.ssh/voicespeak_release.pub \
+     tag -s v1.0.0 -m v1.0.0
    git push origin v1.0.0
    ```
 3. GitHub builds the image. It takes 1 to 2 hours. Watch it under

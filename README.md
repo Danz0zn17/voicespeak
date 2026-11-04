@@ -101,7 +101,21 @@ boot and daily (randomised). It fetches tags and checks out the newest `vX.Y.Z`
 release only if the current checkout does not already contain it, so it never
 moves to untagged main and never downgrades. Dependencies are reinstalled only
 when `requirements.txt` changed. One log line per run:
-`journalctl -u voicespeak-update`. Releasing is just `git tag v0.3.1 && git push --tags`.
+`journalctl -u voicespeak-update`.
+
+Only signed releases are installed. The tag must be an annotated tag signed
+with an SSH key listed in `config/release_signers` of the version already on
+the box; unsigned tags, unknown keys and renamed tags are refused and logged.
+With no key in that file the box never updates. Releasing:
+
+```
+git -c gpg.format=ssh -c user.signingkey=~/.ssh/voicespeak_release.pub \
+  tag -s v0.4.0 -m v0.4.0
+git push origin v0.4.0
+```
+
+To rotate the key, ship the new key in `config/release_signers` in a release
+signed with the old key, then sign later releases with the new one.
 
 ## Live updates
 

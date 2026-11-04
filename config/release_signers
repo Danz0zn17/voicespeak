@@ -1,0 +1,6 @@
+# Release signing keys trusted by the self-updater (voicespeak/updater.py).
+# Format: git/OpenSSH allowed_signers, one key per line:
+#   <identity> namespaces="git" ssh-ed25519 AAAA... <comment>
+# With no key line here the updater refuses every update (fail closed).
+# Changes here only reach a box through a release signed by a key already
+# trusted on that box, so add a new key before retiring the old one.
