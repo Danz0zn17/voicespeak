@@ -98,3 +98,22 @@ def test_update_env_text_replaces_and_appends():
     assert "# DEVICE_TOKEN=commented" in out
     assert out.strip().endswith("DEVICE_TOKEN=tok")
     assert "VOICE_ENGINE=piper" in out
+
+
+def test_hotspot_ssid_uses_serial4():
+    from voicespeak.setup_portal import hotspot_ssid, spoken_ssid
+    assert hotspot_ssid("10000000a1b2c3d4") == "VoiceSpeak-Setup-C3D4"
+    assert spoken_ssid("VoiceSpeak-Setup-C3D4") == "VoiceSpeak Setup C, 3, D, 4"
+
+
+def test_own_hotspots_hidden_from_wifi_list():
+    out = "Home:40:WPA2\nVoiceSpeak-Setup-C3D4:99:\nVoiceSpeak-Setup-A1B2:80:\n"
+    assert [n["ssid"] for n in parse_wifi_list(out)] == ["Home"]
+
+
+def test_page_no_longer_asks_for_pairing_code():
+    page = render_page([{"ssid": "Home", "signal": 50, "secure": True}])
+    assert "pairing_code" not in page
+    # An old page that still posts one is accepted.
+    form, err = parse_setup_form("ssid=Home&password=secret123")
+    assert err == "" and form["pairing_code"] == ""

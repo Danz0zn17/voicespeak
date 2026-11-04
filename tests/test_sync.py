@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from voicespeak import sync
 from voicespeak.engine import Engine
-from voicespeak.models import Action, Board, Cell, SCAN_NEXT
+from voicespeak.models import Action, Board, Cell, SCAN_NEXT, SPEAK_CELL
 from voicespeak.sync import BackgroundSync, boards_digest
 
 
@@ -93,3 +93,59 @@ def test_replace_boards_falls_back_to_first():
     eng.board_idx = 1
     eng.replace_boards([Board("Only", [Cell("O", "O")])])
     assert eng.board.name == "Only"
+
+
+# ---- fixed button slots (Yes/No must never swap)
+
+def rows(*phrases):
+    cats = [{"id": "c1", "name": "Answers"}]
+    return cats, [{"category_id": "c1", "input_type": t, "text": x} for t, x in phrases]
+
+
+def test_slots_map_by_input_type():
+    cats, phs = rows(("analog_left", "Apple"), ("button_o", "No"), ("button_x", "Yes"))
+    cells = sync._adapt(cats, phs)[0].cells
+    assert [c.phrase for c in cells] == ["Yes", "No", "Apple"]
+
+
+def test_empty_red_slot_stays_empty_and_blue_stays_blue():
+    cats, phs = rows(("button_o", "No"), ("analog_left", "Water"))
+    board = sync._adapt(cats, phs)[0]
+    assert board.cells[0].phrase == ""
+    assert board.cells[1].phrase == "No"
+    tts = FakeTTS()
+    eng = Engine([board], tts)
+    eng.dispatch(Action(SPEAK_CELL, target=0))   # red: silent, never "No"
+    assert tts.spoken == []
+    eng.dispatch(Action(SPEAK_CELL, target=1))
+    assert tts.spoken == ["No"]
+
+
+def test_empty_blue_slot_stays_empty():
+    cats, phs = rows(("button_x", "Yes"), ("button_o", "  "), ("analog_left", "Juice"))
+    cells = sync._adapt(cats, phs)[0].cells
+    assert [c.phrase for c in cells] == ["Yes", "", "Juice"]
+
+
+def test_scan_skips_empty_slots():
+    cats, phs = rows(("button_o", "No"), ("analog_left", "Water"))
+    tts = FakeTTS()
+    eng = Engine(sync._adapt(cats, phs), tts)
+    for _ in range(3):
+        eng.dispatch(Action(SCAN_NEXT))
+    assert tts.spoken == ["No", "Water", "No"]
+
+
+def test_scan_prev_skips_empty_slots():
+    from voicespeak.models import SCAN_PREV
+    tts = FakeTTS()
+    eng = Engine([Board("B", [Cell("r", ""), Cell("b", "No"), Cell("w", "Water")])], tts)
+    for _ in range(3):
+        eng.dispatch(Action(SCAN_PREV))
+    assert tts.spoken == ["Water", "No", "Water"]
+
+
+def test_board_with_only_empty_slots_is_dropped():
+    cats = [{"id": "a", "name": "Empty"}, {"id": "b", "name": "Full"}]
+    phs = [{"category_id": "b", "input_type": "button_x", "text": "Yes"}]
+    assert [b.name for b in sync._adapt(cats, phs)] == ["Full"]

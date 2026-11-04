@@ -48,6 +48,8 @@ FOREIGN_RETRY = 1800.0
 GREETING = "Hello. To connect me, open the VoiceSpeak app on a phone or computer on this Wi-Fi."
 FOREIGN = "This box belongs to another account. Remove it in the app, then restart me."
 CONNECTED = "Connected."
+RATE_LIMITED = "Too many new boxes on this network. I will keep trying."
+RATE_LIMIT_DEFAULT = 600.0
 COMMANDS = {"pair_controller", "test_speak", "speak_code"}
 
 
@@ -75,11 +77,30 @@ def poll_interval(state: str, now: float, fast_until: float, claimed_every: floa
 
 
 def status_payload(sw_version: str, model: str, gpio: bool,
-                   controllers: list[str], bt_available: bool) -> dict:
+                   controllers: list[str], bt_available: bool,
+                   switches_seen: bool = False) -> dict:
+    """`gpio` = GPIO input is available (kept for older apps); `switches_seen`
+    = a switch has actually been pressed on this box."""
     return {
         "sw_version": sw_version, "model": model, "gpio": bool(gpio),
+        "switches_seen": bool(switches_seen),
         "controllers": sorted(set(controllers)), "bt_available": bool(bt_available),
     }
+
+
+def retry_after(data: dict, default: float = RATE_LIMIT_DEFAULT) -> float:
+    """Seconds the cloud asked us to wait (retry_after_s), clamped to 10s..1h."""
+    try:
+        value = float(data.get("retry_after_s"))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, 10.0), 3600.0)
+
+
+def serial4(hw_id: str) -> str:
+    """Last 4 letters/digits of the hardware id, uppercased ("...a1b2c3d4" -> "C3D4").
+    Matches the box name ("VoiceSpeak C3D4") and the setup hotspot."""
+    return "".join(ch for ch in hw_id if ch.isalnum())[-4:].upper()
 
 
 def parse_cpuinfo_serial(text: str) -> str | None:
@@ -214,9 +235,10 @@ def device_secret() -> str:
 # ---- network ----------------------------------------------------------------
 
 class CloudError(Exception):
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, data: dict | None = None):
         super().__init__(f"HTTP {status}: {message}")
         self.status = status
+        self.data = data or {}
 
 
 class CloudClient:
@@ -231,7 +253,8 @@ class CloudClient:
         except ValueError:
             data = {}
         if r.status_code >= 400:
-            raise CloudError(r.status_code, str(data.get("error") or r.reason))
+            raise CloudError(r.status_code, str(data.get("error") or r.reason),
+                             data if isinstance(data, dict) else {})
         return data
 
     def hello(self, hw_id: str, secret: str, model: str, version: str) -> dict:
@@ -251,12 +274,15 @@ class DeviceLink:
 
     `offer(boards)` swaps boards only when they changed (BackgroundSync.offer).
     `on_command(name)` runs app commands; it is called on its own thread.
+    `on_claimed()` runs once per session, on its own thread, after the first
+    sync that finds the box claimed and online (e.g. forget bench Wi-Fi).
     """
 
     def __init__(self, tts, offer: Callable, set_state: Callable[[str, Exception | None], None],
                  status: Callable[[], dict], on_command: Callable[[str], None],
                  adapt: Callable[[list, list], list], client: CloudClient | None = None,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic,
+                 on_claimed: Callable[[], None] | None = None):
         self.tts = tts
         self.offer = offer
         self.set_state = set_state
@@ -269,8 +295,18 @@ class DeviceLink:
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._backoff = 5.0
+        self.on_claimed = on_claimed
+        self._claimed_ran = False
+        self._rate_warned = False
 
     # -- public
+    @property
+    def self_test(self) -> bool:
+        """True while the box is known not to belong to a family: no token yet
+        (or removed in the app), or the cloud says it is waiting to be claimed.
+        A claimed box that is offline at boot is never in self-test."""
+        return not self._token() or self.claim.state in (UNCLAIMED, PENDING)
+
     def start(self) -> None:
         threading.Thread(target=self._run, name="cloud", daemon=True).start()
 
@@ -307,6 +343,13 @@ class DeviceLink:
                     self.claim.state = "foreign"
                     self._say([FOREIGN])
                 return FOREIGN_RETRY
+            if e.status == 429:
+                print(f"Hello rate limited: {e}")
+                self.set_state("rate_limited", e)
+                if not self._rate_warned:
+                    self._rate_warned = True
+                    self._say([RATE_LIMITED])
+                return retry_after(e.data)
             self.set_state("offline", e)
             return self._next_backoff()
         except Exception as e:  # noqa: BLE001 - offline is expected
@@ -321,6 +364,7 @@ class DeviceLink:
             updates["PAIRING_CODE"] = str(resp["pairing_code"])
         config.write_env(updates)
         self._backoff = 5.0
+        self._rate_warned = False
         print(f"Registered with the cloud (code {resp.get('pairing_code', '?')}).")
         self._say(self.claim.on_hello(resp, self.clock()))
         return 0.0
@@ -353,6 +397,9 @@ class DeviceLink:
                 self.offer(self.adapt(resp.get("categories") or [], resp.get("phrases") or []))
             except Exception as e:  # noqa: BLE001 - keep current boards
                 print(f"Cloud boards not usable ({e}); keeping current phrases.")
+            if self.on_claimed and not self._claimed_ran:
+                self._claimed_ran = True
+                threading.Thread(target=self.on_claimed, name="claimed", daemon=True).start()
         cmd = resp.get("command")
         if cmd in COMMANDS:
             threading.Thread(target=self.on_command, args=(cmd,), name="command", daemon=True).start()

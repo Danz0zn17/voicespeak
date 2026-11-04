@@ -15,6 +15,7 @@ import threading
 from pathlib import Path
 
 from . import config
+from .bench import SwitchesSeen, self_test_line
 from .engine import Engine
 from .input import build_sources, merge
 from .models import SPEAK_CODE, SYNC
@@ -54,6 +55,7 @@ def run() -> int:
     sources = build_sources(input_map)
     hid = next((s for s in sources if s.name == "hid"), None)
     has_gpio = any(s.name == "gpio" for s in sources)
+    switches = SwitchesSeen()
 
     def controllers() -> list[str]:
         return hid.connected_names() if hid else []
@@ -75,12 +77,16 @@ def run() -> int:
         def status() -> dict:
             return cloud.status_payload(
                 cloud.sw_version(), cloud.device_model(), has_gpio,
-                controllers(), bt_pair.bt_available(),
+                controllers(), bt_pair.bt_available(), switches.seen,
             )
+
+        def on_claimed() -> None:
+            from .setup_portal import forget_bench_wifi
+            forget_bench_wifi()
 
         link = cloud.DeviceLink(
             tts, offer=syncer.offer, set_state=syncer.set_state, status=status,
-            on_command=on_command, adapt=_adapt,
+            on_command=on_command, adapt=_adapt, on_claimed=on_claimed,
         )
         engine.on_sync = None
         link.start()
@@ -99,6 +105,13 @@ def run() -> int:
     try:
         for input_id in merge(sources):
             action = input_map.get(input_id)
+            switches.note(input_id)  # reported in the next status heartbeat
+            # Unclaimed: say what each input is, so wiring can be checked.
+            if link and link.self_test:
+                line = self_test_line(input_id, action)
+                if line:
+                    tts.speak_system(line)
+                    continue
             if not action:
                 continue
             if action.kind == SPEAK_CODE:

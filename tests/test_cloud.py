@@ -115,7 +115,14 @@ def test_pending_claim_extends_fast_window():
 def test_status_payload_shape():
     s = status_payload("0.3.0", "Raspberry Pi Zero 2 W", 1, ["8BitDo", "8BitDo"], 0)
     assert s == {"sw_version": "0.3.0", "model": "Raspberry Pi Zero 2 W", "gpio": True,
-                 "controllers": ["8BitDo"], "bt_available": False}
+                 "switches_seen": False, "controllers": ["8BitDo"], "bt_available": False}
+    assert status_payload("0.3.1", "Pi", True, [], True, switches_seen=True)["switches_seen"] is True
+
+
+def test_serial4_matches_contract():
+    assert cloud.serial4("10000000a1b2c3d4") == "C3D4"
+    assert cloud.serial4("ab-12:cd") == "12CD"
+    assert cloud.serial4("") == ""
 
 
 def test_cpuinfo_serial():
@@ -262,3 +269,91 @@ def test_auto_pair_skips_when_connected(monkeypatch):
     monkeypatch.setattr(bt_pair, "pair_controller", lambda *a, **k: called.append(1))
     assert not bt_pair.auto_pair_window(FakeTTS(), True, controllers=lambda: ["Pad"])
     assert called == []
+
+
+# ---- rate limit on device-hello
+
+class HelloClient:
+    def __init__(self, results):
+        self.results = list(results)
+
+    def hello(self, *args):
+        r = self.results.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def make_hello_link(monkeypatch, results):
+    monkeypatch.delenv("DEVICE_TOKEN", raising=False)
+    monkeypatch.setattr(cloud, "hardware_id", lambda: "10000000a1b2c3d4")
+    monkeypatch.setattr(cloud, "device_secret", lambda: "s")
+    monkeypatch.setattr(cloud.config, "write_env", lambda u: os.environ.update(u))
+    states = []
+    tts = FakeTTS()
+    link = DeviceLink(tts, offer=lambda b: None, set_state=lambda s, e: states.append(s),
+                      status=dict, on_command=lambda c: None, adapt=lambda c, p: [],
+                      client=HelloClient(results), clock=lambda: 0.0)
+    return link, tts, states
+
+
+def test_rate_limited_hello_warns_once_and_waits_as_told(monkeypatch):
+    limited = CloudError(429, "Too many new devices, try later", {"retry_after_s": 900})
+    link, tts, states = make_hello_link(monkeypatch, [limited, limited, limited])
+    assert link._hello() == 900
+    assert link._hello() == 900
+    assert link._hello() == 900
+    assert tts.said == [cloud.RATE_LIMITED]
+    assert states[-1] == "rate_limited"
+
+
+def test_rate_limit_without_retry_after_uses_default_and_rearms(monkeypatch):
+    limited = CloudError(429, "slow down")
+    ok = {"device_token": "t1", "pairing_code": "AB12CD", "claimed": False}
+    link, tts, _ = make_hello_link(monkeypatch, [limited, ok, limited])
+    try:
+        assert link._hello() == cloud.RATE_LIMIT_DEFAULT
+        assert link._hello() == 0.0               # registered: warning re-arms
+        monkeypatch.delenv("DEVICE_TOKEN")
+        link._hello()
+        assert tts.said.count(cloud.RATE_LIMITED) == 2
+    finally:
+        os.environ.pop("DEVICE_TOKEN", None)
+        os.environ.pop("PAIRING_CODE", None)
+
+
+def test_retry_after_is_clamped():
+    assert cloud.retry_after({"retry_after_s": 1}) == 10
+    assert cloud.retry_after({"retry_after_s": 99999}) == 3600
+    assert cloud.retry_after({"retry_after_s": "x"}) == cloud.RATE_LIMIT_DEFAULT
+
+
+# ---- self-test mode and claimed hook
+
+def test_self_test_only_while_known_unclaimed(monkeypatch):
+    link, _, _, _, _ = make_link(monkeypatch, [{"claimed": True, "categories": [], "phrases": []}])
+    assert link.self_test                      # cloud said unclaimed
+    link.claim.state = cloud.UNREGISTERED      # token, not synced yet (offline boot)
+    assert not link.self_test                  # a family's box never self-tests offline
+    link.claim.state = UNCLAIMED
+    link.tick()
+    assert not link.self_test                  # claimed: phrases as usual
+    monkeypatch.delenv("DEVICE_TOKEN")
+    assert link.self_test                      # removed in the app / never registered
+
+
+def test_on_claimed_runs_once(monkeypatch):
+    import threading
+    monkeypatch.setattr(threading, "Thread", lambda target, args=(), **kw: type("T", (), {"start": lambda self: target(*args)})())
+    link, _, _, _, _ = make_link(monkeypatch, [
+        {"claimed": False},
+        {"claimed": True, "categories": [], "phrases": []},
+        {"claimed": True, "categories": [], "phrases": []},
+    ])
+    ran = []
+    link.on_claimed = lambda: ran.append(1)
+    link.tick()
+    assert ran == []
+    link.tick()
+    link.tick()
+    assert ran == [1]
