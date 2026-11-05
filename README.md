@@ -135,9 +135,21 @@ re-templated for the box (the installer's `/home/pi/voicespeak-app` and
 `/home/pi/voicespeak` substitution, plus the service user and runtime dir) and
 installed when they changed, followed by `daemon-reload`; changed units are
 restarted and the main service always is. One log line per run:
-`journalctl -u voicespeak-update`. Releasing: set `VERSION` to the new number,
-commit, then `git tag v0.3.1 && git push --tags`. The image build fails early
-if `VERSION` does not match the tag.
+`journalctl -u voicespeak-update`.
+
+Only signed releases are installed. The tag must be an annotated tag signed
+with an SSH key listed in `config/release_signers` of the version already on
+the box; unsigned tags, unknown keys and renamed tags are refused and logged.
+With no key in that file the box never updates.
+
+Releasing: set `VERSION` to the new number and merge to `main`, then run
+**Actions > Release** on `main` with the tag (e.g. `v0.3.1`). It checks
+`VERSION` matches, signs the tag with the release key (the
+`RELEASE_SIGNING_KEY` secret of the `release` environment, usable only from
+`main`), checks it the way a box does, pushes it and starts the image build.
+
+To rotate the key, ship the new key in `config/release_signers` in a release
+signed with the old key, then put the new private key in the secret.
 
 ## Live updates
 

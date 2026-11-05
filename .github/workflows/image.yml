@@ -1,5 +1,6 @@
 # Builds the VoiceSpeak SD card image and publishes it as a GitHub release.
-# Trigger: push a tag like v1.0.0 (see image/README.md), or run by hand.
+# Trigger: the Release workflow (or a pushed tag like v1.0.0, see
+# image/README.md), or run by hand on a branch for an unpublished test build.
 name: Build SD card image
 
 on:
@@ -35,7 +36,7 @@ jobs:
           persist-credentials: false
 
       - name: Check VERSION matches the tag
-        if: github.event_name == 'push'
+        if: github.ref_type == 'tag'
         run: |
           FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
           if [ "v${FILE_VERSION}" != "${GITHUB_REF_NAME}" ]; then
@@ -49,7 +50,8 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          # A tag push, or the Release workflow starting a build on a tag.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else

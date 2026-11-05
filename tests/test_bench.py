@@ -201,6 +201,8 @@ def test_run_update_installs_units_after_checkout(monkeypatch, tmp_path):
     calls = mock_systemctl(monkeypatch)
     monkeypatch.setattr(updater, "_as_owner", lambda d: [])
     monkeypatch.setattr(updater, "UNIT_DIR", units)
+    # Signature checks are covered in test_updater.py; here every tag passes.
+    monkeypatch.setattr(updater, "verify_release", lambda git, d, tag, s: ("a" * 40, ""))
 
     def run(cmd, cwd, timeout=300):
         calls.append(cmd)
