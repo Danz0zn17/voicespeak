@@ -4,3 +4,4 @@
 # With no key line here the updater refuses every update (fail closed).
 # Changes here only reach a box through a release signed by a key already
 # trusted on that box, so add a new key before retiring the old one.
+release@voicespeak namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINjkOCxm2fQiugo4YfL2LMqDsQuXBiiO/lbthjI7IRhv voicespeak-release

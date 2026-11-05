@@ -21,15 +21,12 @@ What happens on first boot:
 
 ## Making a release (Danny)
 
-1. Make sure everything you want in the image is pushed to `main`.
-2. Sign the tag with the release key and push it. Boxes ignore unsigned tags
-   (see "Self-update" in the main README):
-   ```
-   git -c gpg.format=ssh -c user.signingkey=~/.ssh/voicespeak_release.pub \
-     tag -s v1.0.0 -m v1.0.0
-   git push origin v1.0.0
-   ```
-3. GitHub builds the image. It takes 1 to 2 hours. Watch it under
+1. Make sure everything you want in the image is on `main`, with `VERSION`
+   bumped (e.g. `1.0.0`).
+2. **Actions > Release > Run workflow** on `main`, version `v1.0.0`. It signs
+   the tag with the release key and pushes it. Boxes ignore unsigned tags
+   (see "Self-update" in the main README).
+3. The Release workflow starts the image build. It takes 1 to 2 hours. Watch it under
    **Actions > Build SD card image**.
 4. When it finishes, the release page has three files:
    - `VoiceSpeak-v1.0.0-arm64.img.xz`: the image

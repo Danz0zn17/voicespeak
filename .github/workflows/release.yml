@@ -1,0 +1,65 @@
+# Makes a signed release: tags main with the release key, then starts the
+# SD card image build for that tag. Boxes only install tags signed by a key in
+# config/release_signers (see "Self-update" in README.md).
+# Run by hand: Actions > Release > Run workflow, on main, with e.g. v0.4.0.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag, e.g. v0.4.0 (must match the VERSION file)"
+        required: true
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    # The signing key is an environment secret, only usable from main.
+    environment: release
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [ "${GITHUB_REF_NAME}" = "main" ] || { echo "Run this on main"; exit 1; }
+          [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version must look like v1.2.3"; exit 1; }
+          [ "v$(tr -d '[:space:]' < VERSION)" = "${VERSION}" ] || { echo "VERSION file says $(cat VERSION)"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then echo "${VERSION} already exists"; exit 1; fi
+
+      - name: Sign and push the tag
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          umask 077
+          key="${RUNNER_TEMP}/release_key"
+          trap 'rm -f "${key}"' EXIT
+          printf '%s\n' "${RELEASE_SIGNING_KEY}" > "${key}"
+          git -c user.name="VoiceSpeak release" -c user.email=release@voicespeak \
+            -c gpg.format=ssh -c user.signingkey="${key}" \
+            tag -s "${VERSION}" -m "${VERSION}"
+          # Same check a box runs before installing.
+          git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=config/release_signers \
+            verify-tag "${VERSION}"
+          git push origin "refs/tags/${VERSION}"
+
+      # Tags pushed by this workflow do not trigger other workflows, so start
+      # the image build for the new tag directly.
+      - name: Start the image build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh workflow run image.yml --repo "${GITHUB_REPOSITORY}" --ref "${VERSION}" -f version="${VERSION}"
