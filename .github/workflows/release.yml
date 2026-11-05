@@ -1,14 +1,14 @@
 # Makes a signed release: tags main with the release key, then starts the
 # SD card image build for that tag. Boxes only install tags signed by a key in
 # config/release_signers (see "Self-update" in README.md).
-# Run by hand: Actions > Release > Run workflow, on main, with e.g. v0.4.0.
+# Run by hand: Actions > Release > Run workflow, on main, with e.g. v0.3.1.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag, e.g. v0.4.0 (must match the VERSION file)"
+        description: "Release tag, e.g. v0.3.1 (must match the VERSION file)"
         required: true
 
 permissions:
