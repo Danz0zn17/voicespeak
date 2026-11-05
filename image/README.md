@@ -26,7 +26,7 @@ What happens on first boot:
 2. **Actions > Release > Run workflow** on `main`, version `v1.0.0`. It signs
    the tag with the release key and pushes it. Boxes ignore unsigned tags
    (see "Self-update" in the main README).
-3. The Release workflow starts the image build. It takes 1 to 2 hours. Watch it under
+3. The pushed tag starts the image build. It takes 1 to 2 hours. Watch it under
    **Actions > Build SD card image**.
 4. When it finishes, the release page has three files:
    - `VoiceSpeak-v1.0.0-arm64.img.xz`: the image
