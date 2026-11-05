@@ -146,7 +146,9 @@ Releasing: set `VERSION` to the new number and merge to `main`, then run
 **Actions > Release** on `main` with the tag (e.g. `v0.3.1`). It checks
 `VERSION` matches, signs the tag with the release key (the
 `RELEASE_SIGNING_KEY` secret of the `release` environment, usable only from
-`main`), checks it the way a box does, pushes it and starts the image build.
+`main`), checks it the way a box does and pushes it with the
+`RELEASE_DEPLOY_KEY` deploy key, which starts the image build. A tag ruleset
+lets only that deploy key create, move or delete `v*` tags.
 
 To rotate the key, ship the new key in `config/release_signers` in a release
 signed with the old key, then put the new private key in the secret.

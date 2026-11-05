@@ -1,5 +1,5 @@
-# Makes a signed release: tags main with the release key, then starts the
-# SD card image build for that tag. Boxes only install tags signed by a key in
+# Makes a signed release: tags main with the release key and pushes the tag,
+# which starts the SD card image build. Boxes only install tags signed by a key in
 # config/release_signers (see "Self-update" in README.md).
 # Run by hand: Actions > Release > Run workflow, on main, with e.g. v0.3.1.
 name: Release
@@ -12,8 +12,7 @@ on:
         required: true
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: release
@@ -43,23 +42,25 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
         run: |
           umask 077
           key="${RUNNER_TEMP}/release_key"
-          trap 'rm -f "${key}"' EXIT
+          deploy_key="${RUNNER_TEMP}/deploy_key"
+          known_hosts="${RUNNER_TEMP}/known_hosts"
+          trap 'rm -f "${key}" "${deploy_key}"' EXIT
           printf '%s\n' "${RELEASE_SIGNING_KEY}" > "${key}"
+          printf '%s\n' "${RELEASE_DEPLOY_KEY}" > "${deploy_key}"
+          # GitHub's published host key (api.github.com/meta).
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "${known_hosts}"
           git -c user.name="VoiceSpeak release" -c user.email=release@voicespeak \
             -c gpg.format=ssh -c user.signingkey="${key}" \
             tag -s "${VERSION}" -m "${VERSION}"
           # Same check a box runs before installing.
           git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=config/release_signers \
             verify-tag "${VERSION}"
-          git push origin "refs/tags/${VERSION}"
-
-      # Tags pushed by this workflow do not trigger other workflows, so start
-      # the image build for the new tag directly.
-      - name: Start the image build
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
-        run: gh workflow run image.yml --repo "${GITHUB_REPOSITORY}" --ref "${VERSION}" -f version="${VERSION}"
+          # Pushed with the release deploy key: the v* tag ruleset only lets
+          # that key create release tags. A deploy key push also starts the
+          # SD card image build (image.yml runs on v* tags).
+          GIT_SSH_COMMAND="ssh -i ${deploy_key} -o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=yes" \
+            git push "git@github.com:${GITHUB_REPOSITORY}.git" "refs/tags/${VERSION}"
