@@ -11,6 +11,9 @@ Rules:
   file refuses every update (fail closed). A new key only takes effect after
   a release signed by an existing key ships it.
 - Dependencies are reinstalled only when requirements.txt changed.
+- systemd units from the repo's systemd/ folder are re-templated for this box
+  (same path substitution as the installer) and installed when they changed,
+  then daemon-reload; changed units are restarted (the main service always is).
 - One log line per run.
 
 Runs as root (it restarts the service), but git and pip run as the owner of
@@ -33,6 +36,11 @@ _SHA = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 
 SIGNERS_FILE = "config/release_signers"
 MAX_CANDIDATES = 5  # newest tags tried per run, so junk tags cannot cost unbounded work
+_PI_PATHS = re.compile(r"/home/pi/voicespeak(-app)?")
+UNIT_DIR = Path("/etc/systemd/system")
+# Not restarted here: the update service is us, the setup
+# hotspot only matters at boot, and voicespeak.service is restarted last anyway.
+NO_RESTART = {"voicespeak-update.service", "voicespeak-setup.service", "voicespeak.service"}
 
 
 def release_tags(tags: list[str]) -> list[str]:
@@ -117,6 +125,54 @@ def _req_hash(app_dir: Path) -> str:
         return ""
 
 
+def render_unit(text: str, app_dir: Path, data_dir: Path, user: str, uid: int) -> str:
+    """The repo's /home/pi unit -> this box's paths, user and runtime dir.
+    One pass, so /home/pi/voicespeak never rewrites inside voicespeak-app."""
+    out = _PI_PATHS.sub(lambda m: str(app_dir) if m.group(1) else str(data_dir), text)
+    out = re.sub(r"(?m)^User=pi$", f"User={user}", out)
+    return out.replace("/run/user/1000", f"/run/user/{uid}")
+
+
+def _owner(app_dir: Path) -> tuple[str, int, Path]:
+    st = app_dir.stat()
+    try:
+        pw = pwd.getpwuid(st.st_uid)
+        return pw.pw_name, st.st_uid, Path(pw.pw_dir)
+    except KeyError:
+        return "pi", st.st_uid, app_dir.parent
+
+
+def install_units(app_dir: Path, unit_dir: Path | None = None) -> list[str]:
+    """Install changed units from app_dir/systemd. Returns the changed names.
+    Needs root and a systemd host; elsewhere it does nothing."""
+    unit_dir = unit_dir or UNIT_DIR
+    src_dir = app_dir / "systemd"
+    if os.geteuid() != 0 or not unit_dir.is_dir() or not src_dir.is_dir():
+        return []
+    user, uid, home = _owner(app_dir)
+    data_dir = Path(os.environ.get("VOICESPEAK_HOME") or home / "voicespeak")
+    changed, added = [], []
+    for src in sorted([*src_dir.glob("*.service"), *src_dir.glob("*.timer")]):
+        wanted = render_unit(src.read_text(), app_dir, data_dir, user, uid)
+        dest = unit_dir / src.name
+        current = dest.read_text() if dest.exists() else None
+        if current == wanted:
+            continue
+        dest.write_text(wanted)
+        changed.append(src.name)
+        if current is None and "[Install]" in wanted:
+            added.append(src.name)
+    if not changed:
+        return []
+    _run(["systemctl", "daemon-reload"], app_dir)
+    for name in added:
+        _run(["systemctl", "enable", name], app_dir)
+    for name in changed:
+        if name not in NO_RESTART:
+            _run(["systemctl", "restart", name], app_dir)
+    return changed
+
+
 def run_update(app_dir: Path = config.PACKAGE_DIR) -> int:
     pre = _as_owner(app_dir)
     git = [*pre, "git", "-C", str(app_dir)]
@@ -158,6 +214,13 @@ def run_update(app_dir: Path = config.PACKAGE_DIR) -> int:
             pip = _run([*pre, "pip3", "install", "--quiet", "--break-system-packages",
                         "-r", str(app_dir / "requirements.txt")], app_dir, timeout=900)
             pip_note = ", dependencies updated" if pip.returncode == 0 else ", dependency install FAILED"
+        try:
+            units = install_units(app_dir)
+        except OSError as e:
+            units = []
+            pip_note += f", unit install FAILED ({e})"
+        if units:
+            pip_note += f", units updated ({' '.join(units)})"
         try:
             ok = _run(["systemctl", "restart", "voicespeak.service"], app_dir).returncode == 0
         except OSError:

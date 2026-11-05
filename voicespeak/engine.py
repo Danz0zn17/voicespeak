@@ -59,21 +59,29 @@ class Engine:
         if 0 <= idx < len(cells):
             self._speak(cells[idx].phrase)
 
-    def scan_next(self) -> None:
+    def _scan(self, step: int) -> None:
+        """Move the scan pointer by step, skipping empty slots, and speak."""
         cells = self.board.cells
-        if not cells:
+        n = len(cells)
+        if not any(c.phrase for c in cells):
             return
-        # From the unset state (-1) the first press lands on the first cell.
-        self.scan_idx = 0 if self.scan_idx == -1 else (self.scan_idx + 1) % len(cells)
-        self._speak(cells[self.scan_idx].phrase)
+        # From the unset state (-1) forward lands on the first spoken cell,
+        # backward on the last one.
+        idx = self.scan_idx
+        if idx == -1:
+            idx = -1 if step > 0 else n
+        for _ in range(n):
+            idx = (idx + step) % n
+            if cells[idx].phrase:
+                break
+        self.scan_idx = idx
+        self._speak(cells[idx].phrase)
+
+    def scan_next(self) -> None:
+        self._scan(1)
 
     def scan_prev(self) -> None:
-        cells = self.board.cells
-        if not cells:
-            return
-        # From the unset state (-1) the first press lands on the last cell.
-        self.scan_idx = len(cells) - 1 if self.scan_idx == -1 else (self.scan_idx - 1) % len(cells)
-        self._speak(cells[self.scan_idx].phrase)
+        self._scan(-1)
 
     def next_board(self) -> None:
         self.board_idx = (self.board_idx + 1) % len(self.boards)

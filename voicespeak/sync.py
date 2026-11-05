@@ -84,29 +84,41 @@ def fetch_from_supabase() -> list[Board]:
     return _adapt(cats.json(), phs.json())
 
 
+RED_SLOT = 0   # button_x: the red switch / controller bottom button
+BLUE_SLOT = 1  # button_o: the blue switch / controller right button
+
+
 def _adapt(cats: list[dict], phrases: list[dict]) -> list[Board]:
-    """Categories + phrases rows -> the generalised Board/Cell model."""
+    """Categories + phrases rows -> the generalised Board/Cell model.
+
+    Fixed slots: cell 0 is always button_x (red) and cell 1 always button_o
+    (blue); analog_left phrases follow from cell 2 as the scan list. An empty
+    slot stays an empty cell, so a missing red phrase never moves the blue
+    phrase onto the red button (Yes and No must never swap).
+    """
     by_cat: dict[str, list[dict]] = {}
     for p in phrases:
         by_cat.setdefault(p["category_id"], []).append(p)
 
+    def text(p: dict) -> str:
+        return str(p.get("text") or "").strip()
+
     boards: list[Board] = []
     for cat in cats:
         cp = by_cat.get(cat["id"], [])
-        button_x = next((p["text"] for p in cp if p["input_type"] == "button_x"), "")
-        button_o = next((p["text"] for p in cp if p["input_type"] == "button_o"), "")
-        analog = [p["text"] for p in cp if p["input_type"] == "analog_left"]
+        button_x = next((text(p) for p in cp if p.get("input_type") == "button_x" and text(p)), "")
+        button_o = next((text(p) for p in cp if p.get("input_type") == "button_o" and text(p)), "")
+        analog = [text(p) for p in cp if p.get("input_type") == "analog_left" and text(p)]
 
-        cells: list[Cell] = []
-        if button_x:
-            cells.append(Cell(label="X", phrase=button_x, position=0))
-        if button_o:
-            cells.append(Cell(label="O", phrase=button_o, position=1))
-        for i, text in enumerate(analog):
-            cells.append(Cell(label=text, phrase=text, position=len(cells) + i))
+        cells = [
+            Cell(label="Red button", phrase=button_x, position=RED_SLOT),
+            Cell(label="Blue button", phrase=button_o, position=BLUE_SLOT),
+        ]
+        for i, t in enumerate(analog):
+            cells.append(Cell(label=t, phrase=t, position=2 + i))
         boards.append(Board(name=cat["name"], cells=cells))
 
-    boards = [b for b in boards if b.cells]
+    boards = [b for b in boards if any(c.phrase for c in b.cells)]
     if not boards:
         raise RuntimeError("Cloud returned no usable boards")
     return boards

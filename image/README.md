@@ -17,7 +17,7 @@ What happens on first boot:
    serial number), so several boxes on one network can be told apart.
 2. It picks the right speaker: the I2S amplifier on a Zero 2 W build, the
    headphone jack on a Pi 4. Never HDMI.
-3. If there is no network, it opens the **VoiceSpeak-Setup** Wi-Fi for a phone.
+3. If there is no network, it opens a **VoiceSpeak-Setup-XXXX** Wi-Fi for a phone (XXXX = last 4 of the serial).
 
 ## Making a release (Danny)
 
@@ -56,7 +56,7 @@ You need: a computer, a microSD card reader and a 32GB card.
 5. **Storage:** choose the SD card. Double-check it is the card, not a USB drive.
 6. **Customisation:**
    - For a box going to a family: skip it all. The family sets up Wi-Fi from their phone.
-   - On the bench: you may add your workshop Wi-Fi so the box is online straight away.
+   - On the bench: you may add your workshop Wi-Fi so the box is online straight away. The box forgets it by itself once a family connects it and it is on their Wi-Fi.
    - To get into the box for support: set a username and password, and turn on
      SSH under Remote access. Leave SSH off for boxes that ship.
 7. **Write**, wait for it to verify, take the card out, put it in the Pi.
@@ -70,8 +70,8 @@ the family sets up Wi-Fi from their phone.
 
 - [ ] Card flashed and verified by Imager
 - [ ] Power on. Within about 2 minutes the box speaks.
-- [ ] If not on Wi-Fi: a phone sees **VoiceSpeak-Setup**, the page opens and the box joins Wi-Fi
-- [ ] Each big switch speaks its phrase; Next board and Repeat work
+- [ ] If not on Wi-Fi: a phone sees **VoiceSpeak-Setup-XXXX** (last 4 of the serial), the page opens and the box joins Wi-Fi
+- [ ] Self-test (box not yet connected to a family): each big switch says its name ("Red button", "More phrases", "Next board", "Repeat") and each controller button says which one it is
 - [ ] Hold Next board for 5 seconds: "Pairing mode". Turn on a Bluetooth controller: "Controller connected"
 - [ ] A USB controller works when plugged in
 - [ ] Volume is loud enough across a room
